@@ -73,17 +73,27 @@ func buildAWSApiGatewayRestAPI(arns []string) *resources.AWSApiGatewayRestApi {
 			Types: []string{"EDGE"},
 		},
 		Name: cfn.Ref("AWS::StackName"),
-		Policy: &PolicyDocument{
-			Version: "2012-10-17",
-			Statement: []Statement{
-				{
-					Action:    []string{"execute-api:Invoke"},
-					Effect:    "Allow",
-					Principal: map[string][]string{"AWS": arns},
-					Resource:  []string{"*"},
-				},
-			},
-		},
+		// Policy: &PolicyDocument{
+		// 	Version: "2012-10-17",
+		// 	Statement: []Statement{
+		// 		{
+		// 			Action:    []string{"execute-api:Invoke"},
+		// 			Effect:    "Allow",
+		// 			Principal: map[string][]string{"AWS": arns},
+		// 			Resource:  []string{"*"},
+		// 		},
+		// 	},
+		// },
+	}
+}
+
+func buildAWSApiGatewayAuthorizer(CognitoUserPoolArns []string) *resources.AWSApiGatewayAuthorizer {
+	return &resources.AWSApiGatewayAuthorizer{
+		RestApiId:      cfn.Ref("RestAPI"),
+		Name:           "Cognito-Authorizer",
+		Type:           "COGNITO_USER_POOLS",
+		IdentitySource: "method.request.header.Authorization",
+		ProviderARNs:   CognitoUserPoolArns,
 	}
 }
 
@@ -176,8 +186,9 @@ func buildAWSApiGatewayMethod(resourceLogicalName, path string) *resources.AWSAp
 		RequestParameters: map[string]bool{
 			"method.request.path.proxy": true,
 		},
-		AuthorizationType: "AWS_IAM",
+		AuthorizationType: "COGNITO_USER_POOLS",
 		HttpMethod:        "ANY",
+		AuthorizerId:      cfn.Ref("CognitoAuthorizer"),
 		ResourceId:        cfn.Ref(resourceLogicalName),
 		RestApiId:         cfn.Ref("RestAPI"),
 		Integration: &resources.AWSApiGatewayMethod_Integration{
@@ -195,7 +206,7 @@ func buildAWSApiGatewayMethod(resourceLogicalName, path string) *resources.AWSAp
 		},
 	}
 
-	m.SetDependsOn([]string{"LoadBalancer"})
+	m.SetDependsOn([]string{"LoadBalancer", "CognitoAuthorizer"})
 	return m
 }
 
@@ -225,13 +236,14 @@ func buildCustomDomain(domainName, certificateArn string) *resources.AWSApiGatew
 }
 
 type TemplateConfig struct {
-	Network          *network.Network
-	Rule             extensionsv1beta1.IngressRule
-	NodePort         int
-	StageName        string
-	Arns             []string
-	CustomDomainName string
-	CertificateArn   string
+	Network             *network.Network
+	Rule                extensionsv1beta1.IngressRule
+	NodePort            int
+	StageName           string
+	Arns                []string
+	CognitoUserPoolArns []string
+	CustomDomainName    string
+	CertificateArn      string
 }
 
 func BuildApiGatewayTemplateFromIngressRule(cfg *TemplateConfig) *cfn.Template {
@@ -261,6 +273,9 @@ func BuildApiGatewayTemplateFromIngressRule(cfg *TemplateConfig) *cfn.Template {
 
 	restAPI := buildAWSApiGatewayRestAPI(cfg.Arns)
 	template.Resources["RestAPI"] = restAPI
+
+	cognitoAuthorizer := buildAWSApiGatewayAuthorizer(cfg.CognitoUserPoolArns)
+	template.Resources["CognitoAuthorizer"] = cognitoAuthorizer
 
 	deployment := buildAWSApiGatewayDeployment(cfg.StageName, methodLogicalNames)
 	template.Resources["Deployment"] = deployment

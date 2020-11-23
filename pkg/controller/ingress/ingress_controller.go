@@ -68,6 +68,7 @@ const (
 	IngressAnnotationNginxReplicas    = "apigateway.ingress.kubernetes.io/nginx-replicas"
 	IngressAnnotationNginxImage       = "apigateway.ingress.kubernetes.io/nginx-image"
 	IngressAnnotationNginxServicePort = "apigateway.ingress.kubernetes.io/nginx-service-port"
+	CognitoUserPoolArns               = "apigateway.authorizer.cognito.userpool-arns"
 )
 
 var (
@@ -633,13 +634,14 @@ func (r *ReconcileIngress) create(instance *extensionsv1beta1.Ingress) (*extensi
 	}
 
 	cfnTemplate := cfn.BuildApiGatewayTemplateFromIngressRule(&cfn.TemplateConfig{
-		Rule:             instance.Spec.Rules[0],
-		Network:          network,
-		NodePort:         int(svc.Spec.Ports[0].NodePort),
-		Arns:             getArns(instance),
-		StageName:        getStageName(instance),
-		CustomDomainName: getCustomDomainName(instance),
-		CertificateArn:   getCertificateArn(instance),
+		Rule:                instance.Spec.Rules[0],
+		Network:             network,
+		NodePort:            int(svc.Spec.Ports[0].NodePort),
+		Arns:                getArns(instance),
+		CognitoUserPoolArns: getCognitoUserPoolsArns(instance),
+		StageName:           getStageName(instance),
+		CustomDomainName:    getCustomDomainName(instance),
+		CertificateArn:      getCertificateArn(instance),
 	})
 
 	b, err := cfnTemplate.YAML()
@@ -683,13 +685,14 @@ func (r *ReconcileIngress) update(instance *extensionsv1beta1.Ingress) error {
 	}
 
 	cfnTemplate := cfn.BuildApiGatewayTemplateFromIngressRule(&cfn.TemplateConfig{
-		Rule:             instance.Spec.Rules[0],
-		Network:          network,
-		Arns:             getArns(instance),
-		StageName:        getStageName(instance),
-		NodePort:         int(svc.Spec.Ports[0].NodePort),
-		CustomDomainName: getCustomDomainName(instance),
-		CertificateArn:   getCertificateArn(instance),
+		Rule:                instance.Spec.Rules[0],
+		Network:             network,
+		Arns:                getArns(instance),
+		CognitoUserPoolArns: getCognitoUserPoolsArns(instance),
+		StageName:           getStageName(instance),
+		NodePort:            int(svc.Spec.Ports[0].NodePort),
+		CustomDomainName:    getCustomDomainName(instance),
+		CertificateArn:      getCertificateArn(instance),
 	})
 	b, err := cfnTemplate.YAML()
 	if err != nil {

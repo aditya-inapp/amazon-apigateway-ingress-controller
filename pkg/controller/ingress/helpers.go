@@ -37,6 +37,10 @@ func getArns(ingress *extensionsv1beta1.Ingress) []string {
 	return strings.Split(ingress.ObjectMeta.Annotations[IngressAnnotationClientArns], ",")
 }
 
+func getCognitoUserPoolsArns(ingress *extensionsv1beta1.Ingress) []string {
+	return strings.Split(ingress.ObjectMeta.Annotations[CognitoUserPoolArns], ",")
+}
+
 func getNginxImage(ingress *extensionsv1beta1.Ingress) string {
 	image, ok := ingress.ObjectMeta.Annotations[IngressAnnotationNginxImage]
 	if ok {

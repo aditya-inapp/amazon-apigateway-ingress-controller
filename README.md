@@ -38,6 +38,7 @@ metadata:
     apigateway.ingress.kubernetes.io/nginx-replicas: "3"
     apigateway.ingress.kubernetes.io/nginx-image: nginx:latest
     apigateway.ingress.kubernetes.io/nginx-service-port: "9090"
+    apigateway.authorizer.cognito.userpool-arns: "arn::cog-pool"
 spec:
   rules:
     - http:
