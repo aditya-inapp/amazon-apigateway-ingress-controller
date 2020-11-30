@@ -5,11 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/labels"
-
+	"github.com/aws/aws-sdk-go/service/apigateway"
+	"github.com/aws/aws-sdk-go/service/apigateway/apigatewayiface"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	cfn "github.com/awslabs/amazon-apigateway-ingress-controller/pkg/cloudformation"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func getCustomDomainName(ingress *extensionsv1beta1.Ingress) string {
@@ -70,9 +71,65 @@ func getNginxReplicas(ingress *extensionsv1beta1.Ingress) int {
 	return r
 }
 
-func shouldUpdate(stack *cloudformation.Stack, instance *extensionsv1beta1.Ingress) bool {
+func shouldUpdate(stack *cloudformation.Stack, instance *extensionsv1beta1.Ingress, apigw apigatewayiface.APIGatewayAPI) bool {
 	if cfn.StackOutputMap(stack)[cfn.OutputKeyClientARNS] != strings.Join(getArns(instance), ",") {
 		return true
+	}
+
+	apiId := cfn.StackOutputMap(stack)[cfn.OutputKeyRestApiID]
+	var getResourceInput apigateway.GetResourcesInput
+	var limit int64
+	limit = 500
+	method := "methods"
+	embed := []*string{&method}
+	getResourceInput.RestApiId = &apiId
+	getResourceInput.Limit = &limit
+	getResourceInput.Embed = embed
+	apiResources, error := apigw.GetResources(&getResourceInput)
+
+	if error != nil {
+		return false
+	}
+
+	var items []*apigateway.Resource
+	if apiResources != nil {
+		items = apiResources.Items
+	}
+
+	if items != nil {
+		for _, ingressRule := range instance.Spec.Rules {
+			if ingressRule.HTTP == nil {
+				continue
+			}
+
+			for _, path := range ingressRule.HTTP.Paths {
+				var needUpdates bool = true
+				for _, apiItem := range items {
+					if strings.Compare(path.Path, *apiItem.Path) == 0 {
+						needUpdates = false
+						break
+					}
+				}
+				if needUpdates {
+					return true
+				}
+			}
+
+			//To identity removed paths
+			for _, apiItem := range items {
+				var needUpdates bool = true
+				for _, path := range ingressRule.HTTP.Paths {
+					if strings.HasPrefix(*apiItem.Path, path.Path) || strings.HasPrefix(path.Path, *apiItem.Path) {
+						needUpdates = false
+						break
+					}
+				}
+				if needUpdates {
+					return true
+				}
+			}
+
+		}
 	}
 
 	return false
