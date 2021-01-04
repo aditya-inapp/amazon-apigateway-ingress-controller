@@ -30,6 +30,15 @@ http {
        }
 {{ end }}
 {{- end }}
+	location / {
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection "Upgrade";
+		proxy_connect_timeout 7d;
+		proxy_send_timeout 7d;
+		proxy_read_timeout 7d;
+		proxy_pass http://service-ui:8001;
+	}
     }
 }
 `

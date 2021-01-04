@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	OutputKeyRestApiID          = "RestAPIID"
-	OutputKeyAPIGatewayEndpoint = "APIGatewayEndpoint"
-	OutputKeyClientARNS         = "ClientARNS"
+	OutputKeyRestApiID             = "RestAPIID"
+	OutputKeyAPIGatewayEndpoint    = "APIGatewayEndpoint"
+	OutputKeyClientARNS            = "ClientARNS"
+	OutputKeyAPIGatewayWSSEndpoint = "OutputKeyAPIGatewayWSSEndpoint"
 )
 
 func toLogicalName(idx int, parts []string) string {
@@ -73,17 +74,14 @@ func buildAWSApiGatewayRestAPI(arns []string) *resources.AWSApiGatewayRestApi {
 			Types: []string{"EDGE"},
 		},
 		Name: cfn.Ref("AWS::StackName"),
-		// Policy: &PolicyDocument{
-		// 	Version: "2012-10-17",
-		// 	Statement: []Statement{
-		// 		{
-		// 			Action:    []string{"execute-api:Invoke"},
-		// 			Effect:    "Allow",
-		// 			Principal: map[string][]string{"AWS": arns},
-		// 			Resource:  []string{"*"},
-		// 		},
-		// 	},
-		// },
+	}
+}
+
+func buildAWSApiGatewayWebSocketAPI() *resources.AWSApiGatewayV2Api {
+	return &resources.AWSApiGatewayV2Api{
+		Name:                     fmt.Sprintf("%s-websocket", cfn.Ref("AWS::StackName")),
+		ProtocolType:             "WEBSOCKET",
+		RouteSelectionExpression: "$request.body.action",
 	}
 }
 
@@ -235,6 +233,58 @@ func buildCustomDomain(domainName, certificateArn string) *resources.AWSApiGatew
 	}
 }
 
+func buildAWSApiGatewayWSSRoute() *resources.AWSApiGatewayV2Route {
+	return &resources.AWSApiGatewayV2Route{
+		ApiId:             cfn.Ref("webSocketAPI"),
+		RouteKey:          "$default",
+		AuthorizationType: "NONE",
+		Target:            cfn.Join("/", []string{"integrations", cfn.Ref("webSocketIntegration")}),
+	}
+}
+
+func buildAWSAPIGatewayWSSIntegration() *resources.AWSApiGatewayV2Integration {
+	return &resources.AWSApiGatewayV2Integration{
+		ApiId:               cfn.Ref("webSocketAPI"),
+		ConnectionId:        cfn.Ref("VPCLink"),
+		ConnectionType:      "VPC_LINK",
+		IntegrationMethod:   "ANY",
+		PassthroughBehavior: "WHEN_NO_MATCH",
+		// RequestParameters: map[string]string{
+		// 	"integration.request.path.proxy":             "method.request.path.proxy",
+		// 	"integration.request.header.Accept-Encoding": "'identity'",
+		// },
+		IntegrationType: "HTTP_PROXY",
+		TimeoutInMillis: 29000,
+		IntegrationUri:  cfn.Join("", []string{"http://", cfn.GetAtt("LoadBalancer", "DNSName"), "/"}),
+	}
+}
+
+func buildAWSAPIGatewayWSSIntegrationResponse() *resources.AWSApiGatewayV2IntegrationResponse {
+	return &resources.AWSApiGatewayV2IntegrationResponse{
+		ApiId:                  cfn.Ref("webSocketAPI"),
+		IntegrationId:          cfn.Ref("webSocketIntegration"),
+		IntegrationResponseKey: "$default",
+	}
+}
+
+func buildAWSAPIGatewayWSSDeployment(stageName string) *resources.AWSApiGatewayV2Deployment {
+	d := &resources.AWSApiGatewayV2Deployment{
+		ApiId: cfn.Ref("webSocketAPI"),
+		// StageName: stageName,
+	}
+	d.SetDependsOn([]string{"webSocketIntegration", "webSocketAPI", "webSocketDefaultRoute", "webSocketIntegrationResponse"})
+	return d
+}
+
+func buildAWSAPIGatewayWSSStage(stageName string) *resources.AWSApiGatewayV2Stage {
+	s := &resources.AWSApiGatewayV2Stage{
+		ApiId:        cfn.Ref("webSocketAPI"),
+		StageName:    stageName,
+		DeploymentId: cfn.Ref("webSocketDeployment"),
+	}
+	return s
+}
+
 type TemplateConfig struct {
 	Network             *network.Network
 	Rule                extensionsv1beta1.IngressRule
@@ -274,6 +324,24 @@ func BuildApiGatewayTemplateFromIngressRule(cfg *TemplateConfig) *cfn.Template {
 	restAPI := buildAWSApiGatewayRestAPI(cfg.Arns)
 	template.Resources["RestAPI"] = restAPI
 
+	webSocketAPI := buildAWSApiGatewayWebSocketAPI()
+	template.Resources["webSocketAPI"] = webSocketAPI
+
+	webSocketIntegration := buildAWSAPIGatewayWSSIntegration()
+	template.Resources["webSocketIntegration"] = webSocketIntegration
+
+	webSocketDefaultRoute := buildAWSApiGatewayWSSRoute()
+	template.Resources["webSocketDefaultRoute"] = webSocketDefaultRoute
+
+	webSocketIntegrationResponse := buildAWSAPIGatewayWSSIntegrationResponse()
+	template.Resources["webSocketIntegrationResponse"] = webSocketIntegrationResponse
+
+	webSocketDeployment := buildAWSAPIGatewayWSSDeployment(cfg.StageName)
+	template.Resources["webSocketDeployment"] = webSocketDeployment
+
+	webSocketStage := buildAWSAPIGatewayWSSStage(cfg.StageName)
+	template.Resources["webSocketStage"] = webSocketStage
+
 	cognitoAuthorizer := buildAWSApiGatewayAuthorizer(cfg.CognitoUserPoolArns)
 	template.Resources["CognitoAuthorizer"] = cognitoAuthorizer
 
@@ -292,9 +360,10 @@ func BuildApiGatewayTemplateFromIngressRule(cfg *TemplateConfig) *cfn.Template {
 	}
 
 	template.Outputs = map[string]interface{}{
-		OutputKeyRestApiID:          Output{Value: cfn.Ref("RestAPI")},
-		OutputKeyAPIGatewayEndpoint: Output{Value: cfn.Join("", []string{"https://", cfn.Ref("RestAPI"), ".execute-api.", cfn.Ref("AWS::Region"), ".amazonaws.com/", cfg.StageName})},
-		OutputKeyClientARNS:         Output{Value: strings.Join(cfg.Arns, ",")},
+		OutputKeyRestApiID:             Output{Value: cfn.Ref("RestAPI")},
+		OutputKeyAPIGatewayEndpoint:    Output{Value: cfn.Join("", []string{"https://", cfn.Ref("RestAPI"), ".execute-api.", cfn.Ref("AWS::Region"), ".amazonaws.com/", cfg.StageName})},
+		OutputKeyClientARNS:            Output{Value: strings.Join(cfg.Arns, ",")},
+		OutputKeyAPIGatewayWSSEndpoint: Output{Value: cfn.Join("", []string{"wss://", cfn.Ref("webSocketAPI"), ".execute-api.", cfn.Ref("AWS::Region"), ".amazonaws.com/", cfg.StageName})},
 	}
 
 	return template

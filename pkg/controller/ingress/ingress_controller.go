@@ -70,6 +70,7 @@ const (
 	IngressAnnotationNginxServicePort     = "apigateway.ingress.kubernetes.io/nginx-service-port"
 	CognitoUserPoolArns                   = "apigateway.authorizer.cognito.userpool-arns"
 	IngressAnnotationCFStackUpdateTimeout = "apigateway.ingress.kubernetes.io/cf-stack-update-timeout-seconds"
+	IngressWSSServiceUIName               = "apigateway.wss.service-ui-name"
 )
 
 var (
