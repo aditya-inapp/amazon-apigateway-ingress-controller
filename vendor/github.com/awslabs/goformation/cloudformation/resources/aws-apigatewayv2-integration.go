@@ -21,7 +21,7 @@ type AWSApiGatewayV2Integration struct {
 	// Required: false
 	// See: http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-apigatewayv2-integration.html#cfn-apigatewayv2-integration-connectiontype
 	ConnectionType string `json:"ConnectionType,omitempty"`
-	ConnectionId   string `json:"ConnectionType,omitempty"`
+	ConnectionId   string `json:"ConnectionId,omitempty"`
 
 	// ContentHandlingStrategy AWS CloudFormation Property
 	// Required: false

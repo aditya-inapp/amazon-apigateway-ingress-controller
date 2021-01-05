@@ -79,11 +79,18 @@ func buildAWSApiGatewayRestAPI(arns []string) *resources.AWSApiGatewayRestApi {
 
 func buildAWSApiGatewayWebSocketAPI() *resources.AWSApiGatewayV2Api {
 	return &resources.AWSApiGatewayV2Api{
-		Name:                     fmt.Sprintf("%s-websocket", cfn.Ref("AWS::StackName")),
+		Name:                     cfn.Join("-", []string{cfn.Ref("AWS::StackName"), "websocket"}),
 		ProtocolType:             "WEBSOCKET",
 		RouteSelectionExpression: "$request.body.action",
 	}
 }
+
+// func buildAWSAPIGatewayWSSAuthorizer(CognitoUserPoolArns []string) *resources.AWSApiGatewayV2Authorizer{
+// 	return &resources.AWSApiGatewayV2Authorizer{
+// 		ApiId: cfn.Ref("webSocketAPI"),
+// 		AuthorizerType: ,
+// 	}
+// }
 
 func buildAWSApiGatewayAuthorizer(CognitoUserPoolArns []string) *resources.AWSApiGatewayAuthorizer {
 	return &resources.AWSApiGatewayAuthorizer{
