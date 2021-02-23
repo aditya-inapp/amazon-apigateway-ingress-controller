@@ -52,6 +52,7 @@ func mapApiGatewayMethodsAndResourcesFromPaths(paths []extensionsv1beta1.HTTPIng
 			resourceLogicalName := fmt.Sprintf("Resource%s", toLogicalName(idx, parts))
 			m[resourceLogicalName] = buildAWSApiGatewayResource(ref, part)
 			m[fmt.Sprintf("Method%s", toLogicalName(idx, parts))] = buildAWSApiGatewayMethod(resourceLogicalName, toPath(idx, parts))
+			m[fmt.Sprintf("MethodCORS%s", toLogicalName(idx, parts))] = buildAWSApiGatewayCors(resourceLogicalName)
 		}
 	}
 
@@ -207,6 +208,53 @@ func buildAWSApiGatewayMethod(resourceLogicalName, path string) *resources.AWSAp
 	}
 
 	m.SetDependsOn([]string{"LoadBalancer", "CognitoAuthorizer"})
+	return m
+}
+
+func buildAWSApiGatewayCors(resourceLogicalName string) *resources.AWSApiGatewayMethod {
+	m := &resources.AWSApiGatewayMethod{
+		HttpMethod:        "OPTIONS",
+		AuthorizationType: "NONE",
+		ResourceId:        cfn.Ref(resourceLogicalName),
+		RestApiId:         cfn.Ref("RestAPI"),
+		ApiKeyRequired:    false,
+		// RequestParameters: {},
+		MethodResponses: []resources.AWSApiGatewayMethod_MethodResponse{
+			{
+				StatusCode: "200",
+				ResponseParameters: map[string]bool{
+					"method.response.header.Access-Control-Allow-Headers": false,
+					"method.response.header.Access-Control-Allow-Methods": false,
+					"method.response.header.Access-Control-Allow-Origin":  false,
+				},
+				ResponseModels: map[string]string{
+					"application/json": "Empty",
+				},
+			},
+		},
+		Integration: &resources.AWSApiGatewayMethod_Integration{
+			Type: "MOCK",
+			RequestTemplates: map[string]string{
+				"application/json": "{\"statusCode\": 200}",
+			},
+			PassthroughBehavior: "WHEN_NO_MATCH",
+			TimeoutInMillis:     29000,
+			IntegrationResponses: []resources.AWSApiGatewayMethod_IntegrationResponse{
+				{
+					StatusCode: "200",
+					ResponseParameters: map[string]string{
+						"method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+						"method.response.header.Access-Control-Allow-Methods": "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'",
+						"method.response.header.Access-Control-Allow-Origin":  "'*'",
+					},
+					ResponseTemplates: map[string]string{
+						"application/json": "null",
+					},
+				},
+			},
+		},
+	}
+	m.SetDependsOn([]string{"LoadBalancer"})
 	return m
 }
 
