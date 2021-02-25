@@ -482,12 +482,17 @@ func (r *ReconcileIngress) delete(instance *extensionsv1beta1.Ingress) (*extensi
 		r.log.Error("unable to verify ASG before delete", zap.Error(err))
 		return nil, nil, err
 	}
-
+	// VPCLink has a dependency issue with API Gateway, two delete attempts are required to successfully delete the
 	if _, err := r.cfnSvc.DeleteStack(&cloudformation.DeleteStackInput{
 		StackName: aws.String(instance.GetObjectMeta().GetName()),
 	}); err != nil {
-		r.log.Error("error deleting apigateway cloudformation stack", zap.Error(err))
-		return nil, nil, err
+		if _, err := r.cfnSvc.DeleteStack(&cloudformation.DeleteStackInput{
+			StackName: aws.String(instance.GetObjectMeta().GetName()),
+		}); err != nil {
+			r.log.Error("error deleting apigateway cloudformation stack", zap.Error(err))
+			return nil, nil, err
+		}
+
 	}
 
 	return instance, &reconcile.Result{Requeue: true}, nil
